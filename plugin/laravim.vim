@@ -110,45 +110,42 @@ function! ExecuteComposerCommand(command)
 endfunction
 
 function! GoToRouteDefinition()
-	let current_line = getline('.')
-	let pattern = "Route::\w+\('[^']\+',\s*\[App\\Http\\Controllers\\[^,]\+::class,'[^']\+'\]\);"
-	echo current_line
 		
-	let match = matchstr(current_line, pattern)
 	
-	if empty(match)
-		echomsg "No Laravel route on the current line"
-		return
-	endif
 	
-	let route_path = matchstr(match, "'[^']\\+'")
-	let controller_path = matchstr(match, "'\\[App\\\\Http\\\\Controllers\\\\[^,]\\+::class'")
-	let method = matchstr(match, "'[^']\\+'\\]")
-	
-	let project_root = FindProjectRoot()
+	let matches = MatchRoute()
+	let controller_path = "app/Http/Controllers/" . matches['controller_path']	
+	let method = matches['route_method']
+
+	let project_root = FindLaravelRoot()
 	
 	if empty(project_root)
 		echo "Laravel project not found"
 		return
 	endif
-	
-	echo route_path
+	let controller_path = project_root . '/'. controller_path
 	echo controller_path
-	echo method	
-
+	if filereadable(controller_path)
+		execute 'edit ' . controller_path
+		call search(method, 'w')
+	endif	
 endfunction	
 
 function! MatchRoute()
 	let current_line = getline('.')
-	let pattern = "Route::\w\+('[^']\+',\s*\[App\\Http\\Controllers\\[^,]\+::class\s*,\s*'[^']\+'\])"
+	let pattern = 'Route::\w\+(''[^'']\+'',\s*\[\\\=App\\Http\\Controllers\\[^,]\+.*::class\s*,\s*''[^'']\+''\])'
 	let match = match(current_line, pattern)
+	let line1 = "Route::post('/enter', [\App\Http\Controllers\CarsController::class, 'enterParking'])->name('api.register-car');"
 
 	if match != -1
-	    let route_controller_class = matchstr(trimmed_line, pattern, '\1')
+	    let route_controller_class = matchstr(current_line, '\\\=App\\Http\\Controllers\\\+.*::class')
 	    let controller_path = substitute(route_controller_class, 'App\\Http\\Controllers\\', '', '') . '.php'
-	    let route_method = matchstr(trimmed_line, pattern, '\2')
-	    echo "Route Method: " . controller_path
-	    echo route_controller_class
+	    let controller_path = substitute(controller_path, '::class', '', '')
+	    let route_method = matchstr(current_line, ',\s*''[^'']\+''])')
+	    let route_method = substitute(route_method, ',\s*', '', '')
+	    let route_method = substitute(route_method, '])', '', '')
+	    let route_method = substitute(route_method, "'", '', 'g')
+	    return {"route_method" : route_method, "controller_path" : controller_path }
 	else
 	    echo "Current line does not match the pattern."
 	endif
