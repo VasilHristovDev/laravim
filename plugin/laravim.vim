@@ -8,7 +8,7 @@ if exists("g:loaded_laravim")
 endif
 
 let g:loaded_laravim = 1
-nnoremap gh :call GoToRouteDefinition()<CR>
+nnoremap gh :call GoTo()<CR>
 
 command! HasComposer :call HasComposer()
 command! ListArtisanCommands :call ListArtisanCommands()
@@ -109,44 +109,103 @@ function! ExecuteComposerCommand(command)
 	echo output
 endfunction
 
+function! GoTo()
+	let current_file = expand('%:t')
+	if current_file == 'web.php'
+		call GoToViewDefinition()
+	elseif current_file == 'api.php'
+		call GoToRouteDefinition()
+	else
+		echohl ErrorMsg
+		echomsg "We still don't support this file for route tracing"
+		echohl None
+	endif
+
+endfunction
+
 function! GoToRouteDefinition()
-		
-	
-	
 	let matches = MatchRoute()
 	let controller_path = "app/Http/Controllers/" . matches['controller_path']	
 	let method = matches['route_method']
+	echo controller_path
 
 	let project_root = FindLaravelRoot()
 	
 	if empty(project_root)
+		echohl ErrorMsg
 		echo "Laravel project not found"
+		echohl None
 		return
 	endif
 	let controller_path = project_root . '/'. controller_path
-	echo controller_path
 	if filereadable(controller_path)
-		execute 'edit ' . controller_path
+		execute 'tabnew ' . controller_path
 		call search(method, 'w')
 	endif	
 endfunction	
 
+function! GoToViewDefinition()
+       	let view = MatchView()
+	let project_root = FindLaravelRoot()
+	if empty(project_root)
+		echohl ErrorMsg
+		echomsg "Laravel project not found"
+		echohl None
+		return
+	endif
+	let view_path = project_root . '/' . 'resources/views/' . view . '.blade.php'
+	if filereadable(view_path)
+		execute 'tabnew ' . view_path
+	endif
+endfunction	
+
 function! MatchRoute()
 	let current_line = getline('.')
-	let pattern = 'Route::\w\+(''[^'']\+'',\s*\[\\\=App\\Http\\Controllers\\[^,]\+.*::class\s*,\s*''[^'']\+''\])'
+"	let pattern = 'Route::\w\+(''[^'']\+'',\s*[\\\=App\\Http\\Controllers\\[^,]\+.*::class\s*,\s*''[^'']\+''\])'
+	let pattern = 'Route::\w\+(''[^'']\+'',\s*[\\\=App\\Http\\Controllers\\\{-}\\[^,]\+.*::class,\s*''[^'']\+''\])'
+	let pattern_controller_path = '\\\=App\\Http\\Controllers\\'
 	let match = match(current_line, pattern)
-	let line1 = "Route::post('/enter', [\App\Http\Controllers\CarsController::class, 'enterParking'])->name('api.register-car');"
 
 	if match != -1
-	    let route_controller_class = matchstr(current_line, '\\\=App\\Http\\Controllers\\\+.*::class')
-	    let controller_path = substitute(route_controller_class, 'App\\Http\\Controllers\\', '', '') . '.php'
-	    let controller_path = substitute(controller_path, '::class', '', '')
+	    if match(current_line, pattern_controller_path) == -1
+		    let controller_name = matchstr(current_line, '\w\+::class')
+		    let controller_name = substitute(controller_name, '::class', '', '')
+		    let prev_position = getpos('.')
+		    keepjumps norm! 1G
+		    let line =  search(controller_name,'w')
+		    let controller_path = getline('.')
+		    let controller_path = substitute(controller_path, 'use\s*App\\Http\\Controllers\\', '', '') . '.php'
+		    let controller_path = substitute(controller_path, ';', '', '') 
+		    let controller_path = substitute(controller_path, '\\', '/', '') 
+		    call setpos('.', prev_position)
+	    else 
+		    let route_controller_class = matchstr(current_line, '\\\=App\\Http\\Controllers\\\+.*::class')
+		    let controller_path = substitute(route_controller_class, 'App\\Http\\Controllers\\', '', '') . '.php'
+		    let controller_path = substitute(controller_path, '::class', '', '')
+	    endif
 	    let route_method = matchstr(current_line, ',\s*''[^'']\+''])')
 	    let route_method = substitute(route_method, ',\s*', '', '')
 	    let route_method = substitute(route_method, '])', '', '')
 	    let route_method = substitute(route_method, "'", '', 'g')
 	    return {"route_method" : route_method, "controller_path" : controller_path }
 	else
+	    echohl ErrorMsg
 	    echo "Current line does not match the pattern."
+	    echohl None
 	endif
+endfunction
+function! MatchView()
+	let current_line = getline('.')
+	let pattern = 'return\s*view(''[^'']\+'');'
+       	let match = match(current_line, pattern)
+	
+	if match != -1
+		let view = matchstr(current_line,'view(''[^'']\+'')')
+		let view = substitute(view, 'view(''\|'')', '', 'g')
+		return view
+	else
+		echohl ErrorMsg
+		echomsg "Invalid view"
+		echohl None
+	endif	
 endfunction
