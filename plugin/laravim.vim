@@ -8,7 +8,9 @@ if exists("g:loaded_laravim")
 endif
 
 let g:loaded_laravim = 1
+let g:vendor_library_paths = {}
 nnoremap gh :call GoTo()<CR>
+nnoremap gd :call GoToDefinition()<CR>
 
 command! HasComposer :call HasComposer()
 command! ListArtisanCommands :call ListArtisanCommands()
@@ -32,9 +34,8 @@ endfunction
 
 
 function! IsLaravel(current_directory)
-	let project_root = FindLaravelRoot()
+	let project_root = g:laravel_root
 	if empty(project_root)
-		echo "It is not Laravel project"
 		return 0
 	endif
 
@@ -44,7 +45,7 @@ function! IsLaravel(current_directory)
 	return 1
 endfunction
 
-function! FindLaravelRoot() abort
+function! FindLaravelRoot() 
 	let current_dir = getcwd()
 	while !empty(current_dir) && current_dir !=# '/'
 		if filereadable(current_dir . '/composer.json') && filereadable(current_dir . '/artisan')
@@ -52,8 +53,12 @@ function! FindLaravelRoot() abort
 		endif
 		let current_dir = fnamemodify(current_dir, ':h')
 	endwhile
+	echohl ErrorMsg
+	echo "No Laravel project found"
+	echohl None
 	return ''
 endfunction
+let g:laravel_root = FindLaravelRoot()
 
 function! GetParentDirectory()
 	let current_file = expand('%:p')
@@ -72,9 +77,8 @@ function! ListArtisanCommands()
 endfunction
 
 function! ExecuteArtisanCommand(command)
-	let project_root = FindLaravelRoot()	
+	let project_root = g:laravel_root	
 	if empty(project_root)
-		echo "It is not a Laravel Project"
 		return	
 	endif
 	let cmd = 'cd ' . shellescape(project_root) . ' && php artisan ' . a:command
@@ -129,12 +133,9 @@ function! GoToRouteDefinition()
 	let method = matches['route_method']
 	echo controller_path
 
-	let project_root = FindLaravelRoot()
+	let project_root = g:laravel_root
 	
 	if empty(project_root)
-		echohl ErrorMsg
-		echo "Laravel project not found"
-		echohl None
 		return
 	endif
 	let controller_path = project_root . '/'. controller_path
@@ -146,11 +147,8 @@ endfunction
 
 function! GoToViewDefinition()
        	let view = MatchView()
-	let project_root = FindLaravelRoot()
+	let project_root = g:laravel_root
 	if empty(project_root)
-		echohl ErrorMsg
-		echomsg "Laravel project not found"
-		echohl None
 		return
 	endif
 	let view_path = project_root . '/' . 'resources/views/' . view . '.blade.php'
@@ -172,7 +170,7 @@ function! MatchRoute()
 		    let controller_name = substitute(controller_name, '::class', '', '')
 		    let prev_position = getpos('.')
 		    keepjumps norm! 1G
-		    let line =  search(controller_name,'w')
+		    call search(controller_name,'w')
 		    let controller_path = getline('.')
 		    let controller_path = substitute(controller_path, 'use\s*App\\Http\\Controllers\\', '', '') . '.php'
 		    let controller_path = substitute(controller_path, ';', '', '') 
@@ -208,4 +206,119 @@ function! MatchView()
 		echomsg "Invalid view"
 		echohl None
 	endif	
+endfunction
+function! GoToDefinition()
+	let current_line = getline('.')
+	let cursor_col = col('.')
+	
+	let start_col = search('\w\+\s*::\w\+\s*(\s*.*\s*)\s*\%(\->\|;\|\n\)', 'bcnW')
+	if start_col > 0
+		let class_method = matchstr(current_line, '\w\+\s*::\w\+\s*(\s*.*\s*)\s*\%(\->\|;\|\n\)')
+		let class_name = matchstr(class_method, '\w\+')
+		let method_name = matchstr(class_method, '::\w\+')
+		let method_name = substitute(method_name, '::', '', '')
+		let current_pos = getpos('.')
+		keepjumps norm! 1G	
+		call search('\'.class_name.';','w')
+		let line = getline('.')
+		let line = substitute(line, 'use\s*', '', '')
+		let line = substitute(line, ';', '', '')
+		let line = substitute(line, '\\', '/', 'g') . '.php'
+		let result = GetFullPath(line)
+		if result["found"]
+			let path = result["path"] . substitute(line, '\w\+', '', '')
+			echo path
+		else
+			let project_root = g:laravel_root
+			if empty(project_root)
+				return
+			endif
+			let path = project_root . '/' . line 
+		endif
+		call setpos('.', current_pos)
+		if filereadable(path)
+			execute 'tabnew ' . path
+			call search(method_name, 'w')
+		else
+			echohl ErrorMsg
+			echo "Cannot open class file"
+			echohl None	
+		endif
+	endif
+	return	
+endfunction
+function! GoToMethodDefinition()
+endfunction
+function! GoToClassDefinition()
+	let class = expand('<cword>')
+ 	keepjumps norm! 1G
+	call search(class, 'w')
+	let class_path = getline('.')	
+	let class_path = substitute(class_path, 'use\s*', '', '')
+	let class_path = substitute(class_path, ';', '', '')
+	let root_path = g:laravel_root 
+	
+	if empty(root_path)
+		return
+	endif
+
+	let class_path = substitute(class_path, '\\App\|App', 'app', '') . '.php'
+	let library_name = matchstr(class_path, '\w\+')
+	let library_name = substitute(library_name, '\\', '', '')
+	if has_key(g:vendor_library_paths, library_name)
+		let path = g:vendor_library_paths[library_name]
+		let path = path . substitute(class_path, library_name . '\\', '', '')
+		echo path
+	else
+		let path = root_path . '/' . class_path
+		let path = substitute(path, '\\', '/', 'g')
+	endif
+
+	echo path
+	if filereadable(path)
+		execute 'tabnew '. path
+		return
+	endif
+	return	
+endfunction
+
+function! ListSrcFilesInVendor()
+    let vendor_dir = g:laravel_root . '/vendor' 
+    let libraries = glob(vendor_dir . '/*', 1, 1)
+
+    for library in libraries
+        call SearchSrcDir(library)
+    endfor
+endfunction
+function! Test()
+	echo g:vendor_library_paths["Illuminate"]
+endfunction
+function! SearchSrcDir(directory)
+    let src_dir = a:directory.'/src'
+    if isdirectory(src_dir)
+        let src_files = glob(src_dir . '/*', 0, 1)
+        for file in src_files
+            let file_name = fnamemodify(file, ':t')
+	    if isdirectory(file)
+		    let g:vendor_library_paths[file_name] = file
+	    endif
+        endfor
+    else
+        let subdirs = glob(a:directory . '/*', 1, 1)
+        for subdir in subdirs
+            call SearchSrcDir(subdir)
+        endfor
+    endif
+endfunction
+
+call ListSrcFilesInVendor()
+function! GetFullPath(line)
+	let lib_name = matchstr(a:line, '\w\+/')
+	let lib_name = substitute(lib_name, '/', '', '')
+	let returnable = {"found" : 0, "path": a:line }
+	if has_key(g:vendor_library_paths, lib_name)
+		let returnable["path"] = g:vendor_library_paths[lib_name]
+		let returnable["found"] = 1
+	endif
+	return returnable
 endfunction
