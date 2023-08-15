@@ -100,7 +100,8 @@ function! ExecuteComposerCommand(command)
 	if has_composer == 0
 		return
 	endif
-	let cmd = 'composer ' . a:command
+	let project_root = g:laravel_root
+	let cmd = 'cd '. shellescape(project_root). '&& composer ' . a:command
 	let output = system(cmd)
 
 	if v:shell_error != 0
