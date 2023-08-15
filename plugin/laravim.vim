@@ -10,6 +10,7 @@ endif
 let g:loaded_laravim = 1
 let g:vendor_library_paths = {}
 nnoremap gh :call GoTo()<CR>
+nnoremap gc :call GoToClassDefinition()<CR>
 nnoremap gd :call GoToDefinition()<CR>
 
 command! HasComposer :call HasComposer()
@@ -131,7 +132,6 @@ function! GoToRouteDefinition()
 	let matches = MatchRoute()
 	let controller_path = "app/Http/Controllers/" . matches['controller_path']	
 	let method = matches['route_method']
-	echo controller_path
 
 	let project_root = g:laravel_root
 	
@@ -208,6 +208,7 @@ function! MatchView()
 		echohl None
 	endif	
 endfunction
+
 function! GoToDefinition()
 	let current_line = getline('.')
 	let cursor_col = col('.')
@@ -228,7 +229,6 @@ function! GoToDefinition()
 		let result = GetFullPath(line)
 		if result["found"]
 			let path = result["path"] . substitute(line, '\w\+', '', '')
-			echo path
 		else
 			let project_root = g:laravel_root
 			if empty(project_root)
@@ -248,37 +248,42 @@ function! GoToDefinition()
 	endif
 	return	
 endfunction
+
 function! GoToMethodDefinition()
 endfunction
+
 function! GoToClassDefinition()
 	let class = expand('<cword>')
+	let current_pos = getpos('.')
  	keepjumps norm! 1G
 	call search(class, 'w')
 	let class_path = getline('.')	
 	let class_path = substitute(class_path, 'use\s*', '', '')
 	let class_path = substitute(class_path, ';', '', '')
+	let class_path = substitute(class_path, '\\', '/', 'g') . '.php'
 	let root_path = g:laravel_root 
-	
 	if empty(root_path)
 		return
 	endif
 
-	let class_path = substitute(class_path, '\\App\|App', 'app', '') . '.php'
-	let library_name = matchstr(class_path, '\w\+')
-	let library_name = substitute(library_name, '\\', '', '')
-	if has_key(g:vendor_library_paths, library_name)
-		let path = g:vendor_library_paths[library_name]
-		let path = path . substitute(class_path, library_name . '\\', '', '')
-		echo path
+	let result = GetFullPath(class_path)
+	if result["found"]
+		let path = result["path"] . substitute(class_path, '\w\+', '', '')
 	else
-		let path = root_path . '/' . class_path
-		let path = substitute(path, '\\', '/', 'g')
+		let class_path = substitute(class_path, '\\App\|App', 'app', '') 
+		let project_root = g:laravel_root
+		if empty(project_root)
+			return
+		endif
+		let path = project_root . '/' . class_path
 	endif
-
-	echo path
+	call setpos('.', current_pos)
 	if filereadable(path)
-		execute 'tabnew '. path
-		return
+		execute 'tabnew ' . path
+	else
+		echohl ErrorMsg
+		echo "Cannot open class file"
+		echohl None	
 	endif
 	return	
 endfunction
@@ -291,9 +296,7 @@ function! ListSrcFilesInVendor()
         call SearchSrcDir(library)
     endfor
 endfunction
-function! Test()
-	echo g:vendor_library_paths["Illuminate"]
-endfunction
+
 function! SearchSrcDir(directory)
     let src_dir = a:directory.'/src'
     if isdirectory(src_dir)
@@ -313,6 +316,7 @@ function! SearchSrcDir(directory)
 endfunction
 
 call ListSrcFilesInVendor()
+
 function! GetFullPath(line)
 	let lib_name = matchstr(a:line, '\w\+/')
 	let lib_name = substitute(lib_name, '/', '', '')
