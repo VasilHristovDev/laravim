@@ -1,0 +1,21 @@
+*hascomposer.txt*	For plugin: laravim
+
+============================================================================================
+HasComposer						*hascomposer* *laravim*
+
+:HasComposer       Check if the project you are editting has composer installed. 
+                            
+
+SYNOPSIS
+        :HasComposer
+
+DESCRIPTION
+	This function executes 'composer --version 2> /dev/null/' and checks whether the command returns any errors.
+SEE ALSO
+        |:help laravim|
+
+COPYRIGHT
+        Copyright © Vasil Hristov. This plugin is distributed under the terms of the
+        MIT License. See |laravim-license| for more information.
+
+                                                           *hascomposer-end*	

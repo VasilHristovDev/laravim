@@ -180,6 +180,7 @@ function! MatchRoute()
 		    let route_controller_class = matchstr(current_line, '\\\=App\\Http\\Controllers\\\+.*::class')
 		    let controller_path = substitute(route_controller_class, 'App\\Http\\Controllers\\', '', '') . '.php'
 		    let controller_path = substitute(controller_path, '::class', '', '')
+		    let controller_path = substitute(controller_path, '\\', '/', 'g')
 	    endif
 	    let route_method = matchstr(current_line, ',\s*''[^'']\+''])')
 	    let route_method = substitute(route_method, ',\s*', '', '')

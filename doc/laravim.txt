@@ -1,0 +1,10 @@
+laravim.txt*   For plugin: laravim
+
+===============================================================================
+Laravim                                              *laravim* *laravim*
+
+SEE ALSO
+        :help laravim-name-install for installation instructions.
+        :help laravim-license for license information.
+
+                                                     *laravim-end*
